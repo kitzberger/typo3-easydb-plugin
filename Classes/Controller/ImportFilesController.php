@@ -7,6 +7,8 @@ use Easydb\Typo3Integration\EasydbRequest;
 use Easydb\Typo3Integration\Resource\FileUpdater;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
 use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
 use TYPO3\CMS\Core\Messaging\FlashMessage;
 use TYPO3\CMS\Core\Messaging\FlashMessageQueue;
@@ -19,8 +21,10 @@ use TYPO3\CMS\Core\Type\ContextualFeedbackSeverity;
  * If this is called, a backend user is authenticated
  * so we can perform backend operations here
  */
-class ImportFilesController
+class ImportFilesController implements LoggerAwareInterface
 {
+    use LoggerAwareTrait;
+
     private readonly FlashMessageQueue $messageQueue;
 
     private readonly BackendUserAuthentication $backendUserAuthentication;
@@ -36,10 +40,16 @@ class ImportFilesController
     public function importAction(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
         $importStart = round(microtime(true) * 1000);
+        $this->logger->info('easydb: Import request received', [
+            'backend_user' => $this->backendUserAuthentication->user['username'] ?? null,
+            'folder' => $request->getQueryParams()['id'] ?? null,
+        ]);
         $fileUpdater = new FileUpdater($this->resourceFactory->getFolderObjectFromCombinedIdentifier($request->getQueryParams()['id']));
+        $fileUpdater->setLogger($this->logger);
         try {
             $easydbRequest = EasydbRequest::fromServerRequest($request);
         } catch (\Exception $e) {
+            $this->logger->error('easydb request parsing failed', ['exception' => $e]);
             $response->getBody()->write(json_encode([
                 'status' => 'error',
                 'error' => [
@@ -59,6 +69,10 @@ class ImportFilesController
         foreach ($easydbRequest->getFiles() as $fileData) {
             if (!empty($fileData['error'])) {
                 // Error occurred during building the request
+                $this->logger->warning('easydb file could not be fetched', [
+                    'uid' => $fileData['uid'],
+                    'error' => $fileData['error'],
+                ]);
                 $addedFiles[] = [
                     'uid' => $fileData['uid'],
                     'status' => 'error',
@@ -75,6 +89,12 @@ class ImportFilesController
                 $addedFiles[] = $fileUpdater->addOrUpdateFile($fileData);
                 $this->addFlashMessage($action . 'File', [$fileData['filename']]);
             } catch (\Exception $e) {
+                $this->logger->error('easydb file import failed', [
+                    'uid' => $fileData['uid'],
+                    'filename' => $fileData['filename'],
+                    'action' => $action,
+                    'exception' => $e,
+                ]);
                 $addedFiles[] = [
                     'uid' => $fileData['uid'],
                     'status' => 'error',

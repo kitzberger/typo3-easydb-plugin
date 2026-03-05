@@ -5,12 +5,16 @@ namespace Easydb\Typo3Integration\Backend;
 
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
 use TYPO3\CMS\Core\Exception;
 use TYPO3\CMS\Core\Http\JsonResponse;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
-class AjaxDispatcher
+class AjaxDispatcher implements LoggerAwareInterface
 {
+    use LoggerAwareTrait;
+
     private const requestHandlers = [
         DefaultRequestHandler::class,
         CorsRequestHandler::class,
@@ -44,12 +48,20 @@ class AjaxDispatcher
             if ($requestHandler->canHandleRequest($request)) {
                 $priority = $requestHandler->getPriority();
                 if (isset($suitableRequestHandlers[$priority])) {
+                    $this->logger->error('easydb: Multiple request handlers share the same priority', [
+                        'priority' => $priority,
+                        'handler' => $requestHandlerClassName,
+                    ]);
                     throw new Exception('More than one request handler with the same priority can handle the request, but only one handler may be active at a time!', 1176471352);
                 }
                 $suitableRequestHandlers[$priority] = $requestHandler;
             }
         }
         if (empty($suitableRequestHandlers)) {
+            $this->logger->error('easydb: No suitable request handler found', [
+                'method' => $request->getMethod(),
+                'uri' => (string)$request->getUri(),
+            ]);
             throw new Exception('No suitable request handler found.', 1225418233);
         }
         ksort($suitableRequestHandlers);

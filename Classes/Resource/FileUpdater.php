@@ -4,6 +4,8 @@ namespace Easydb\Typo3Integration\Resource;
 
 use Easydb\Typo3Integration\Persistence\MetaDataProcessor;
 use Easydb\Typo3Integration\Persistence\SystemLanguages;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
 use TYPO3\CMS\Backend\Utility\BackendUtility;
 use TYPO3\CMS\Core\Database\RelationHandler;
 use TYPO3\CMS\Core\DataHandling\DataHandler;
@@ -12,8 +14,10 @@ use TYPO3\CMS\Core\Resource\File;
 use TYPO3\CMS\Core\Resource\Folder;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
-class FileUpdater
+class FileUpdater implements LoggerAwareInterface
 {
+    use LoggerAwareTrait;
+
     private const filePropertiesToImportMapping = [
         'uid' => 'easydb_uid',
         'asset_id' => 'easydb_asset_id',
@@ -87,11 +91,20 @@ class FileUpdater
         $action = 'insert';
         if ($this->hasFile($fileData['uid'])) {
             $action = 'update';
+            $this->logger->info('easydb: Updating existing file', [
+                'uid' => $fileData['uid'],
+                'filename' => $fileData['filename'],
+            ]);
             $existingFile = $this->getFile($fileData['uid']);
             $existingFile->getStorage()->replaceFile($existingFile, $fileData['local_file']);
             $existingFile->rename($fileData['filename']);
             $uploadedFile = $existingFile;
         } else {
+            $this->logger->info('easydb: Adding new file', [
+                'uid' => $fileData['uid'],
+                'filename' => $fileData['filename'],
+                'target_folder' => $this->targetFolder->getCombinedIdentifier(),
+            ]);
             $uploadedFile = $this->targetFolder->addFile($fileData['local_file'], $fileData['filename'], DuplicationBehavior::RENAME);
         }
         $this->addOrUpdateMetaData($uploadedFile, $fileData);

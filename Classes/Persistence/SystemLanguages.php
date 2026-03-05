@@ -21,12 +21,16 @@ namespace Easydb\Typo3Integration\Persistence;
  *  This copyright notice MUST APPEAR in all copies of the script!
  ***************************************************************/
 
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
 use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
 use TYPO3\CMS\Core\Site\Entity\SiteLanguage;
 use TYPO3\CMS\Core\Site\SiteFinder;
 
-class SystemLanguages
+class SystemLanguages implements LoggerAwareInterface
 {
+    use LoggerAwareTrait;
+
     /**
      * @var array<non-empty-string, SiteLanguage>
      */
@@ -56,6 +60,11 @@ class SystemLanguages
                 }
                 $locale = $this->extractLocale($language);
                 if (isset($this->languagesByLocale[$locale]) && $this->languagesByLocale[$locale]->getLanguageId() !== $language->getLanguageId()) {
+                    $this->logger->error('easydb: SiteLanguage locale configured multiple times with different language uids', [
+                        'locale' => $locale,
+                        'existing_language_uid' => $this->languagesByLocale[$locale]->getLanguageId(),
+                        'conflicting_language_uid' => $languageId,
+                    ]);
                     throw new \LogicException(
                         sprintf(
                             'SiteLanguage with locale "%s" is configured multiple times using different language uids "%d" and "%d"',
@@ -92,6 +101,9 @@ class SystemLanguages
     {
         $locale = $this->normalizeLocale($language);
         if ($locale === '') {
+            $this->logger->error('easydb: SiteLanguage has empty locale configured', [
+                'language_uid' => $language->getLanguageId(),
+            ]);
             throw new \LogicException(sprintf('Site Language %d has empty locale configured', $language->getLanguageId()), 1713697035);
         }
         return $locale;

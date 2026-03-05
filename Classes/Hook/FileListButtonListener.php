@@ -6,6 +6,8 @@ namespace Easydb\Typo3Integration\Hook;
 use Easydb\Typo3Integration\Backend\Session;
 use Easydb\Typo3Integration\ExtensionConfig;
 use Easydb\Typo3Integration\Resource\FileUpdater;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
 use TYPO3\CMS\Backend\Routing\Exception\RouteNotFoundException;
 use TYPO3\CMS\Backend\Routing\UriBuilder;
 use TYPO3\CMS\Backend\Template\Components\ButtonBar;
@@ -30,8 +32,10 @@ use TYPO3\CMS\Core\Utility\GeneralUtility;
  * Adds a button for importing files from easydb to the file list module
  * @phpstan-import-type Buttons from ButtonBar
  */
-class FileListButtonListener
+class FileListButtonListener implements LoggerAwareInterface
 {
+    use LoggerAwareTrait;
+
     private LanguageService $languageService;
 
     private BackendUserAuthentication $backendUserAuthentication;
@@ -102,8 +106,11 @@ class FileListButtonListener
             $buttons[ButtonBar::BUTTON_POSITION_LEFT][] = [];
             $buttonBarIndex = count($buttons[ButtonBar::BUTTON_POSITION_LEFT]);
             $buttons[ButtonBar::BUTTON_POSITION_LEFT][$buttonBarIndex][] = $button;
-        } catch (InsufficientFolderAccessPermissionsException) {
-
+        } catch (InsufficientFolderAccessPermissionsException $e) {
+            $this->logger->warning('easydb: File picker button not rendered due to insufficient folder access permissions', [
+                'backend_user' => $this->backendUserAuthentication->user['username'] ?? null,
+                'exception' => $e,
+            ]);
         }
 
         return $buttons;

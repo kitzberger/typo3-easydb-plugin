@@ -9,6 +9,8 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
 use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
 use TYPO3\CMS\Core\Http\JsonResponse;
 use TYPO3\CMS\Core\Http\Response;
@@ -18,8 +20,10 @@ use TYPO3\CMS\Core\Http\Response;
  * for preflight OPTIONS requests before authentication takes place
  * as browsers do not send cookies in preflight requests
  */
-class CorsMiddleware implements MiddlewareInterface
+class CorsMiddleware implements MiddlewareInterface, LoggerAwareInterface
 {
+    use LoggerAwareTrait;
+
     public function __construct(private readonly CorsRequestHandler $corsRequestHandler)
     {
     }
@@ -42,6 +46,10 @@ class CorsMiddleware implements MiddlewareInterface
         }
         $response = null;
         if (empty($_COOKIE[BackendUserAuthentication::getCookieName()])) {
+            $this->logger->warning('easydb import request rejected: no backend cookie present', [
+                'uri' => (string)$request->getUri(),
+                'easydb_ses_id' => $request->getQueryParams()['easydb_ses_id'] ?? null,
+            ]);
             $response = (new JsonResponse([
                 'status' => 'error',
                 'error' => [
@@ -54,6 +62,10 @@ class CorsMiddleware implements MiddlewareInterface
         try {
             $response = $response ?? $handler->handle($request);
         } catch (\Throwable $e) {
+            $this->logger->error('easydb import request failed with exception', [
+                'exception' => $e,
+                'uri' => (string)$request->getUri(),
+            ]);
             $response = new JsonResponse([
                 'status' => 'error',
                 'error' => [
